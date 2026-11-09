@@ -1,0 +1,13 @@
+[package]
+name = "espnow-reliable"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Reliable, ordered message delivery over ESP-NOW, as a no_std sans-IO state machine"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ApexDevelopment/espnow-reliable"
+keywords = ["esp-now", "esp32", "no-std", "embedded", "arq"]
+categories = ["embedded", "network-programming", "no-std::no-alloc"]
+
+[dev-dependencies]
+proptest = "1.12.0"

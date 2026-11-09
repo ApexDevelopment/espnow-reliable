@@ -1,0 +1,11 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc f08b8302846687b8b51798e3b8f9362b93433811e58f86f46443da52c3a26148 # shrinks to seed = 54681891087439070, loss = 0.0, duplication = 0.0, jitter_micros = 37090, first = [], second = [[], [], [], [], [], [], [], [], [], [], []]
+cc 9f23b63c3d45d3008c0476a712f31c7a946301a7107e389cd4b709d16a81bbf1 # shrinks to seed = 5452358091301938108, radio = Radio { loss: 0.2017909208916348, duplication: 0.0, jitter_micros: 11659 }, first = [[], [], [], [], [], [], []], second = [[], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []]
+cc 6524a054fad7fe6c25348aba5f4855e171f60950a2ce9acf7b0d7598a53b1611 # shrinks to seed = 6780138665388777928, radio = Radio { loss: 0.14847209287370372, duplication: 0.08437947781217783, jitter_micros: 3019 }, restarts = [(0, 3)], first = [[], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []], second = [[], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []]
+cc b80f82d3096343b6c305f4ef89190f269186600d20387ee634dfcccec2d6eac5 # shrinks to seed = 5069969710585425472, radio = Radio { loss: 0.0, duplication: 0.13036904682188705, jitter_micros: 10839 }, restarts = [(1, 1)], first = [], second = [[]]
+cc 27ada5de0ffc32f61f1bc534dfa38b5506477c241db9b02e1da149443f218283 # shrinks to seed = 3131524422509088950, radio = Radio { loss: 0.07806901501410612, duplication: 0.1300101954631753, jitter_micros: 14380 }, restarts = [(1, 10)], first = [[], [], [], [], [], [], []], second = [[], [], [], [], []]
