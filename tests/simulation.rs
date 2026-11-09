@@ -43,6 +43,9 @@ struct Radio {
 	loss: f64,
 	duplication: f64,
 	jitter_micros: u64,
+	/// Whether the sender learns of frames that never arrived, as ESP-NOW
+	/// reports unacknowledged unicast frames.
+	reports_losses: bool,
 }
 
 struct Peer {
@@ -123,21 +126,35 @@ impl Simulation {
 		while peer.cursor < peer.outbox.len() && peer.link.send(&peer.outbox[peer.cursor]).is_ok() {
 			peer.cursor += 1;
 		}
-		while let Some(len) = self.peers[from].link.poll_transmit(self.now, &mut buf) {
-			let copies = if self.rng.chance(self.radio.duplication) {
-				2
-			} else {
-				1
-			};
-			for _ in 0..copies {
-				if self.rng.chance(self.radio.loss) {
-					continue;
+		loop {
+			let mut lost = Vec::new();
+			while let Some(len) = self.peers[from].link.poll_transmit(self.now, &mut buf) {
+				let copies = if self.rng.chance(self.radio.duplication) {
+					2
+				} else {
+					1
+				};
+				let mut arrived = false;
+				for _ in 0..copies {
+					if self.rng.chance(self.radio.loss) {
+						continue;
+					}
+					arrived = true;
+					let delay = LATENCY_MICROS + self.rng.below(self.radio.jitter_micros);
+					let arrival = self.now + Duration::from_micros(delay);
+					let tiebreak = self.rng.next();
+					self.air
+						.insert((arrival, tiebreak), (1 - from, buf[..len].to_vec()));
 				}
-				let delay = LATENCY_MICROS + self.rng.below(self.radio.jitter_micros);
-				let arrival = self.now + Duration::from_micros(delay);
-				let tiebreak = self.rng.next();
-				self.air
-					.insert((arrival, tiebreak), (1 - from, buf[..len].to_vec()));
+				if !arrived && self.radio.reports_losses {
+					lost.push(buf[..len].to_vec());
+				}
+			}
+			if lost.is_empty() {
+				break;
+			}
+			for frame in lost {
+				self.peers[from].link.frame_lost(&frame, self.now);
 			}
 		}
 		self.peers[from].handle_events();
@@ -204,11 +221,14 @@ fn messages() -> impl Strategy<Value = Vec<Vec<u8>>> {
 }
 
 fn unreliable_radio() -> impl Strategy<Value = Radio> {
-	(0.0..0.3f64, 0.0..0.2f64, 0..20_000u64).prop_map(|(loss, duplication, jitter_micros)| Radio {
-		loss,
-		duplication,
-		jitter_micros,
-	})
+	(0.0..0.3f64, 0.0..0.2f64, 0..20_000u64, any::<bool>()).prop_map(
+		|(loss, duplication, jitter_micros, reports_losses)| Radio {
+			loss,
+			duplication,
+			jitter_micros,
+			reports_losses,
+		},
+	)
 }
 
 fn assert_prefix(received: &[Vec<u8>], sent: &[Vec<u8>]) -> Result<(), TestCaseError> {
@@ -241,10 +261,11 @@ proptest! {
 		loss in 0.0..=1.0f64,
 		duplication in 0.0..=1.0f64,
 		jitter_micros in 0..200_000u64,
+		reports_losses: bool,
 		first in messages(),
 		second in messages(),
 	) {
-		let radio = Radio { loss, duplication, jitter_micros };
+		let radio = Radio { loss, duplication, jitter_micros, reports_losses };
 		let mut sim = Simulation::new(seed, radio, Config::default(), [first.clone(), second.clone()]);
 		sim.run(HOUR);
 		assert_prefix(&sim.peers[1].received, &first)?;
@@ -281,6 +302,7 @@ fn sequence_numbers_wrap() {
 		loss: 0.05,
 		duplication: 0.05,
 		jitter_micros: 3_000,
+		reports_losses: false,
 	};
 	let messages: Vec<Vec<u8>> = (0..70_000u32).map(|n| n.to_le_bytes().to_vec()).collect();
 	let mut sim = Simulation::new(
@@ -301,6 +323,7 @@ fn a_restarted_peer_is_reported_once() {
 		loss: 0.0,
 		duplication: 0.0,
 		jitter_micros: 0,
+		reports_losses: false,
 	};
 	let messages = vec![vec![1, 2, 3]];
 	let mut sim = Simulation::new(
@@ -324,6 +347,7 @@ fn an_unreachable_peer_fails_the_link() {
 		loss: 0.0,
 		duplication: 0.0,
 		jitter_micros: 0,
+		reports_losses: false,
 	};
 	let mut sim = Simulation::new(1, radio, Config::default(), [vec![vec![1]], Vec::new()]);
 	sim.run(HOUR);
@@ -382,4 +406,31 @@ fn late_frames_from_a_restarted_peer_are_ignored() {
 	assert_eq!(a.poll_event(), None);
 	assert_eq!(a.peer_session(), Some(session(3)));
 	assert!(a.is_connected());
+}
+
+#[test]
+fn a_lost_frame_is_resent_without_waiting() {
+	let session = |n| NonZeroU32::new(n).unwrap();
+	let config = Config::default();
+	let mut a = Box::new(TestLink::new(session(1), config));
+	let mut b = Box::new(TestLink::new(session(2), config));
+	let now = Instant::from_millis(1_000);
+	exchange(&mut a, &mut b, now);
+	assert!(a.is_connected() && b.is_connected());
+
+	a.send(b"hello").unwrap();
+	let mut buf = [0u8; FRAME];
+	let len = a.poll_transmit(now, &mut buf).unwrap();
+	let lost = buf[..len].to_vec();
+	assert_eq!(a.poll_transmit(now, &mut buf), None);
+
+	// Each of the first losses brings the resend forward to now.
+	for _ in 0..2 {
+		a.frame_lost(&lost, now);
+		let len = a.poll_transmit(now, &mut buf).unwrap();
+		assert_eq!(buf[..len], lost[..]);
+	}
+	// After that, the timer decides.
+	a.frame_lost(&lost, now);
+	assert_eq!(a.poll_transmit(now, &mut buf), None);
 }

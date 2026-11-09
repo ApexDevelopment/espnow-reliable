@@ -75,6 +75,10 @@ const CONNECTED: u8 = 1;
 const RESET: u8 = 2;
 const FAILED: u8 = 4;
 
+/// How many times a message is resent right away after [`Link::frame_lost`],
+/// before resends fall back to the timer.
+const FAST_RESENDS: u8 = 2;
+
 #[derive(Clone, Copy)]
 struct SendSlot<const N: usize> {
 	data: [u8; N],
@@ -341,6 +345,30 @@ impl<const WINDOW: usize, const N: usize> Link<WINDOW, N> {
 		AckInfo {
 			ack: self.recv_next,
 			sack,
+		}
+	}
+
+	/// Tells the link that a datagram from [`Link::poll_transmit`] did not
+	/// arrive, such as when ESP-NOW reports that the peer did not acknowledge
+	/// it. A message lost this way is resent right away instead of when its
+	/// timer runs out, the first couple of times. Other frames are left to
+	/// their timers, so a peer that is gone does not cause a flood of resends.
+	pub fn frame_lost(&mut self, datagram: &[u8], now: Instant) {
+		let Some(frame) = Frame::decode(datagram) else {
+			return;
+		};
+		let Body::Data { seq, .. } = frame.body else {
+			return;
+		};
+		if self.failed || frame.src != self.local || frame.dst != self.remote {
+			return;
+		}
+		if usize::from(seq.wrapping_sub(self.send_base)) >= self.in_flight() {
+			return;
+		}
+		let slot = &mut self.send_slots[slot_index::<WINDOW>(seq)];
+		if !slot.acked && slot.transmissions <= FAST_RESENDS {
+			slot.deadline = Some(now);
 		}
 	}
 

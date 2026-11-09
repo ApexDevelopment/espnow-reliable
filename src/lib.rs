@@ -17,6 +17,9 @@
 //!    after each of the calls above and whenever [`Link::poll_timeout`] passes.
 //! 4. Check [`Link::poll_event`] for connection changes.
 //!
+//! If the driver reports frames the peer did not acknowledge, as ESP-NOW
+//! does, pass them to [`Link::frame_lost`] so they are resent sooner.
+//!
 //! Both peers must use this crate. Broadcast is not covered: discovery is up
 //! to the application.
 //!
@@ -55,6 +58,8 @@
 //! assert!(alice.is_idle());
 //! ```
 #![no_std]
+// The examples are indented with tabs, like the code.
+#![allow(clippy::tabs_in_doc_comments)]
 
 mod link;
 mod time;

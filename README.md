@@ -15,6 +15,8 @@ Keep one `Link` per peer MAC address and drive it from your radio loop:
 3. Send whatever `Link::poll_transmit` returns, until it returns `None`, after each of the calls above and whenever the time from `Link::poll_timeout` passes.
 4. Check `Link::poll_event` to learn when the link connects, when the peer restarts, and when the link fails.
 
+ESP-NOW reports when a peer did not acknowledge a unicast frame. Pass such frames back to `Link::frame_lost`, and the link resends them right away instead of waiting for its timer.
+
 The crate documentation has a complete example.
 
 Each `Link` needs a random session id from a hardware random number generator, different every time a link is created, including across reboots. That is how the peer tells a restart apart from a continuing connection.
