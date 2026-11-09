@@ -2,7 +2,7 @@
 
 Reliable, ordered message delivery between two ESP-NOW peers.
 
-ESP-NOW frames can be lost, and a frame resent after a missed acknowledgement can arrive twice. This crate numbers each message, resends it until the peer acknowledges it, and hands received messages to your application exactly once and in the order they were sent. It also notices when the peer restarts, so your application can start over instead of mixing old and new state.
+ESP-NOW frames can be lost, and resent frames can arrive twice. This crate numbers each message, resends it until the peer acknowledges it, and hands received messages to your application exactly once and in the order they were sent. It also notices when the peer restarts, so your application can start over instead of mixing old and new state.
 
 The crate is a `no_std` state machine. It does not allocate, does no I/O and keeps no clock, so it works with esp-radio, ESP-IDF, or any other driver that can send and receive datagrams. Both peers must use it.
 
@@ -25,15 +25,15 @@ Each `Link` needs a random session id from a hardware random number generator, d
 
 A link holds two buffers of `N` bytes for each window slot, which is about 24 KB with the defaults. Keep it in a static or on the heap rather than on a task's stack.
 
-## Behavior to know about
+## Pitfalls
 
 `send` returns `SendError::Full` when the window is full. Wait for acknowledgements and try again.
 
-Messages queued before the handshake finishes are sent once it does. Handshake frames repeat every `hello_interval` until the peer answers, with no time limit.
+Messages queued before a handshake are sent once it's finished. Handshake frames repeat every `hello_interval` until the peer answers, with no time limit.
 
-`Event::Reset` means the peer restarted. Messages it had not acknowledged are discarded, and the link handshakes again on its own. Throw away anything your application built on the old connection.
+`Event::Reset` means the peer restarted. Messages the peer didn't ACK are discarded, and the link automatically handshakes again. Throw away anything your application built on the old connection.
 
-`Event::Failed` means a message went unacknowledged after `max_retransmits` resends. The link stays closed. Create a new one with a new session id to try again.
+`Event::Failed` means a message went unacknowledged after `max_retransmits` resends. This closes the link, you will need to open a new one.
 
 After a peer restarts, frames from its previous session are ignored for `max_frame_age` (100 ms by default). The link assumes no frame takes longer than that to arrive. ESP-NOW sends a frame within a few milliseconds or drops it, so the default leaves a wide margin.
 
@@ -41,4 +41,4 @@ Broadcast and peer discovery are out of scope.
 
 ## License
 
-Licensed under either the [MIT license](LICENSE-MIT) or the [Apache License, Version 2.0](LICENSE-APACHE), at your option.
+Licensed under either the [MIT license](LICENSE-MIT) or the [Apache License, Version 2.0](LICENSE-APACHE), whichever you prefer.
